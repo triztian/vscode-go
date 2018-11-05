@@ -24,6 +24,7 @@ import { getAllPackages } from '../src/goPackages';
 import { getImportPath } from '../src/util';
 import { goPlay } from '../src/goPlayground';
 import { runFillStruct } from '../src/goFillStruct';
+import * as goimpl from '../src/goImpl';
 
 suite('Go Extension Tests', () => {
 	let gopath = process.env['GOPATH'];
@@ -147,6 +148,71 @@ suite('Go Extension Tests', () => {
 			return Promise.reject(err);
 		});
 	}
+
+	test('goImpl - Validate User Input', (done) => {
+		let userInputs = {
+			// valid
+			'a *Type github.com/org/project.Interface': {
+				recvSpec: 'a *Type',
+				interfaceType: 'github.com/org/project.Interface'
+			},
+			'ab *Type github.com/org/project/subpkg.Interface': {
+				recvSpec: 'ab *Type',
+				interfaceType: 'github.com/org/project/subpkg.Interface'
+			},
+			'abc *Type github.com/org/project/subpkg_name.Interface': {
+				recvSpec: 'abc *Type',
+				interfaceType: 'github.com/org/project/subpkg_name.Interface'
+			},
+			'abc *Type github.com/org/project-group/subpkg_name.Interface': {
+				recvSpec: 'abc *Type',
+				interfaceType: 'github.com/org/project-group/subpkg_name.Interface'
+			},
+			'github.com/org/project.Interface': {
+				recvSpec: null,
+				interfaceType: 'github.com/org/project.Interface'
+			},
+			'github.com/org/project/subpkg.Interface': {
+				recvSpec: null,
+				interfaceType: 'github.com/org/project/subpkg.Interface'
+			},
+
+			// invalid
+			'99 x github.com:org/project.Interface': null,
+			't *T github.com:org/project\Interface': null,
+			'x 99 github.com:org/project\Interface': null,
+		};
+
+		for (let userInput in userInputs) {
+			test(userInput, () => {
+				const expected = userInputs[userInput];
+				const isValid = goimpl.validateUserInput(userInput);
+				assert.equal(isValid, expected, 'user input validation failed');
+			});
+		}
+
+		done();
+	});
+
+	test('goImpl - Infer Receiver Spec', (done) => {
+		let uri = vscode.Uri.file(path.join(fixtureSourcePath, 'goImpl', 'struct.go'));
+		const cursor = new vscode.Range(
+			new vscode.Position(2, 5),
+			new vscode.Position(2, 8)
+		);
+
+		vscode.workspace.openTextDocument(uri).then(textDocument => {
+			return vscode.window.showTextDocument(textDocument).then((editor => {
+				let recvSpec = goimpl.inferRecvSpec(
+					editor.document,
+					new vscode.Position(2, 0),
+					new vscode.Position(2, 10), // FIXME: Determine proper end from fixture
+					cursor
+				);
+				assert.equal(recvSpec, 't *Type', 'receiver spec infered incorrectly');
+			}));
+		}).then(done);
+	});
 
 	test('Test Definition Provider using godoc', (done) => {
 		let config = Object.create(vscode.workspace.getConfiguration('go'), {
@@ -1169,6 +1235,7 @@ It returns the number of bytes written and any write error encountered.
 
 	});
 
+
 	test('Test Tags checking', (done) => {
 
 		const config1 = Object.create(vscode.workspace.getConfiguration('go'), {
@@ -1323,4 +1390,5 @@ It returns the number of bytes written and any write error encountered.
 			});
 		}).then(() => done(), done);
 	});
+
 });
